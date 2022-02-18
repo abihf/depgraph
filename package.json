@@ -1,9 +1,10 @@
 {
   "name": "@abihf/depgraph",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ES &amp; TS Dependency Analyzer",
   "main": "index.js",
   "type": "module",
+  "private": false,
   "scripts": {
     "postinstall": "node download.js"
   },
