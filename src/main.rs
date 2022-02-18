@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use once_cell::sync::OnceCell;
 use serde_json::{json, Value};
-use std::{io::SeekFrom, path::PathBuf, sync::Arc, vec};
+use std::{collections::LinkedList, io::SeekFrom, path::PathBuf, sync::Arc, vec};
 use swc::{
     common::FilePathMapping, config::IsModule, ecmascript::ast::EsVersion, try_with_handler,
     Compiler,
@@ -11,19 +11,22 @@ use swc_ecma_dep_graph::{analyze_dependencies, DependencyDescriptor, DependencyK
 use swc_ecma_parser::{EsConfig, Syntax, TsConfig};
 use tokio::{
     fs::File,
-    io::{self, AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, BufReader},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, BufReader},
     sync::Semaphore,
 };
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // let mut handlers: Vec<JoinHandle<Result<(String, Vec<DependencyDescriptor>)>>> = vec![];
-    let mut handlers = vec![];
     let parallel = std::env::var("DEPGRAPH_PARALLEL").unwrap_or("1000".to_string());
     let semaphore = Arc::new(Semaphore::new(parallel.parse()?));
 
     let cur_dir = std::env::current_dir()?;
-    let mut stdin = BufReader::new(io::stdin());
+    let mut stdin = BufReader::new(tokio::io::stdin());
+
+    let c = compiler();
+    let sc = &c.cm;
+
+    let mut handlers = LinkedList::new();
     loop {
         let mut file_name = String::new();
         let size = stdin.read_line(&mut file_name).await?;
@@ -34,7 +37,7 @@ async fn main() -> Result<()> {
 
         let cur_dir = cur_dir.clone();
         let permit = semaphore.clone().acquire_owned().await?;
-        handlers.push(tokio::spawn(async move {
+        handlers.push_back(tokio::spawn(async move {
             let full_path = &cur_dir.join(file_name.clone());
             let mut file = File::open(full_path).await?;
 
@@ -45,55 +48,53 @@ async fn main() -> Result<()> {
             file.read_to_string(&mut buf)
                 .await
                 .context(format!("can not read file {}", file_name.clone()))?;
-            drop(permit);
-            drop(file);
 
-            let deps = analyze(file_name.clone().into(), buf.as_str())?;
-            let res: Result<(String, Vec<DependencyDescriptor>)> = Ok((file_name, deps));
+            drop(file);
+            drop(permit);
+
+            let val = match analyze(file_name.clone().into(), buf.as_str()) {
+                Ok(deps) => Value::Array(
+                    deps.iter()
+                        .map(|dep| {
+                            let loc = sc.lookup_char_pos(dep.span.lo);
+                            let name = dep.specifier.to_string();
+                            let kind: i32 = match dep.kind {
+                                DependencyKind::Require => 0,
+                                DependencyKind::Import => 1,
+                                DependencyKind::Export => 2,
+                                DependencyKind::ImportType => 5,
+                                DependencyKind::ExportType => 6,
+                            };
+                            let dynamic: i32 = if dep.is_dynamic { 1 } else { 0 };
+                            json!({
+                                "k": kind,
+                                "n": name,
+                                "d": dynamic,
+                                "l": loc.line,
+                                "c": loc.col.0
+                            })
+                        })
+                        .collect(),
+                ),
+                Err(err) => json!(format!("{}", err)),
+            };
+
+            let json_line = json!([file_name, val]);
+            serde_json::to_writer(std::io::stdout(), &json_line)?;
+            println!();
+
+            let res: Result<()> = Ok(());
             res
         }));
     }
 
-    let mut list = vec![];
-    let c = compiler();
-    let sc = &c.cm;
-
-    for res in handlers {
-        let (name, deps) = match res.await? {
-            Ok(val) => val,
-            Err(e) => {
-                eprintln!("{}", e);
-                continue;
-            }
+    for handle in handlers {
+        match handle.await? {
+            Err(e) => eprintln!("{}", e),
+            _ => (),
         };
-        let deps = deps
-            .iter()
-            .map(|dep| {
-                let loc = sc.lookup_char_pos(dep.span.lo);
-                let name = dep.specifier.to_string();
-                let kind: i32 = match dep.kind {
-                    DependencyKind::Require => 0,
-                    DependencyKind::Import => 1,
-                    DependencyKind::Export => 2,
-                    DependencyKind::ImportType => 5,
-                    DependencyKind::ExportType => 6,
-                };
-                let dynamic: i32 = if dep.is_dynamic { 1 } else { 0 };
-                json!({
-                    "k": kind,
-                    "n": name,
-                    "d": dynamic,
-                    "l": loc.line,
-                    "c": loc.col.0
-                })
-            })
-            .collect();
-
-        list.push(json!([name, Value::Array(deps)]));
     }
 
-    let obj = Value::Array(list);
-    serde_json::to_writer(std::io::stdout(), &obj)?;
     Ok(())
 }
 

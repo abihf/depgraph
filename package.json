@@ -1,0 +1,23 @@
+{
+  "name": "@abihf/depgraph",
+  "version": "0.1.0",
+  "description": "ES &amp; TS Dependency Analyzer",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "postinstall": "node download.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abihf/depgraph.git"
+  },
+  "author": "Abi Hafshin <abi@hafs.in>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/abihf/depgraph/issues"
+  },
+  "homepage": "https://github.com/abihf/depgraph#readme",
+  "dependencies": {
+    "fetch-h2": "^3.0.1"
+  }
+}
