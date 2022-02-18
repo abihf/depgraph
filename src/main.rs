@@ -12,7 +12,7 @@ use swc_ecma_parser::{EsConfig, Syntax, TsConfig};
 use tokio::{
     fs::File,
     io::{AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, BufReader},
-    sync::Semaphore,
+    sync::{RwLock, Semaphore},
 };
 
 #[tokio::main]
@@ -22,6 +22,7 @@ async fn main() -> Result<()> {
 
     let cur_dir = std::env::current_dir()?;
     let mut stdin = BufReader::new(tokio::io::stdin());
+    let out_lock = Arc::new(RwLock::new(0));
 
     let c = compiler();
     let sc = &c.cm;
@@ -36,6 +37,7 @@ async fn main() -> Result<()> {
         let file_name = String::from(file_name.trim());
 
         let cur_dir = cur_dir.clone();
+        let out_lock = out_lock.clone();
         let permit = semaphore.clone().acquire_owned().await?;
         handlers.push_back(tokio::spawn(async move {
             let full_path = &cur_dir.join(file_name.clone());
@@ -80,8 +82,10 @@ async fn main() -> Result<()> {
             };
 
             let json_line = json!([file_name, val]);
+            let mut guard = out_lock.write().await;
             serde_json::to_writer(std::io::stdout(), &json_line)?;
             println!();
+            *guard += 1;
 
             let res: Result<()> = Ok(());
             res
