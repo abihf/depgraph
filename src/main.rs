@@ -1,18 +1,18 @@
 use anyhow::{anyhow, Context, Result};
-use once_cell::sync::OnceCell;
 use serde_json::{json, Value};
-use std::{collections::LinkedList, io::SeekFrom, path::PathBuf, sync::Arc, vec};
+use std::{collections::LinkedList, io::SeekFrom, sync::Arc, vec};
 use swc::{
-    common::FilePathMapping, config::IsModule, ecmascript::ast::EsVersion, try_with_handler,
-    Compiler,
+    common::{comments::NoopComments, source_map::SourceMap, FileName, FilePathMapping},
+    config::IsModule,
+    ecmascript::ast::EsVersion,
+    try_with_handler, Compiler,
 };
-use swc_common::{comments::NoopComments, source_map::SourceMap, FileName};
 use swc_ecma_dep_graph::{analyze_dependencies, DependencyDescriptor, DependencyKind};
 use swc_ecma_parser::{EsConfig, Syntax, TsConfig};
 use tokio::{
     fs::File,
     io::{AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, BufReader},
-    sync::{RwLock, Semaphore},
+    sync::{OwnedSemaphorePermit, RwLock, Semaphore},
 };
 
 #[tokio::main]
@@ -20,12 +20,11 @@ async fn main() -> Result<()> {
     let parallel = std::env::var("DEPGRAPH_PARALLEL").unwrap_or("1000".to_string());
     let semaphore = Arc::new(Semaphore::new(parallel.parse()?));
 
-    let cur_dir = std::env::current_dir()?;
     let mut stdin = BufReader::new(tokio::io::stdin());
     let out_lock = Arc::new(RwLock::new(0));
 
-    let c = compiler();
-    let sc = &c.cm;
+    let cm = Arc::new(SourceMap::new(FilePathMapping::empty()));
+    let compiler = Arc::new(Compiler::new(cm));
 
     let mut handlers = LinkedList::new();
     loop {
@@ -34,31 +33,19 @@ async fn main() -> Result<()> {
         if size == 0 {
             break;
         }
-        let file_name = String::from(file_name.trim());
 
-        let cur_dir = cur_dir.clone();
+        let c = compiler.clone();
         let out_lock = out_lock.clone();
         let permit = semaphore.clone().acquire_owned().await?;
+
         handlers.push_back(tokio::spawn(async move {
-            let full_path = &cur_dir.join(file_name.clone());
-            let mut file = File::open(full_path).await?;
+            let file_name = file_name.trim();
 
-            let size = file.seek(SeekFrom::End(0)).await?;
-            file.seek(SeekFrom::Start(0)).await?;
-
-            let mut buf = String::with_capacity(size.try_into()?);
-            file.read_to_string(&mut buf)
-                .await
-                .context(format!("can not read file {}", file_name.clone()))?;
-
-            drop(file);
-            drop(permit);
-
-            let val = match analyze(file_name.clone().into(), buf.as_str()) {
+            let val = match analyze(&c, file_name, permit).await {
                 Ok(deps) => Value::Array(
                     deps.iter()
                         .map(|dep| {
-                            let loc = sc.lookup_char_pos(dep.span.lo);
+                            let loc = c.cm.lookup_char_pos(dep.span.lo);
                             let name = dep.specifier.to_string();
                             let kind: i32 = match dep.kind {
                                 DependencyKind::Require => 0,
@@ -82,10 +69,10 @@ async fn main() -> Result<()> {
             };
 
             let json_line = json!([file_name, val]);
-            let mut guard = out_lock.write().await;
+            let guard = out_lock.write().await;
             serde_json::to_writer(std::io::stdout(), &json_line)?;
             println!();
-            *guard += 1;
+            drop(guard);
 
             let res: Result<()> = Ok(());
             res
@@ -93,21 +80,35 @@ async fn main() -> Result<()> {
     }
 
     for handle in handlers {
-        match handle.await? {
-            Err(e) => eprintln!("{}", e),
-            _ => (),
-        };
+        if let Err(e) = handle.await {
+            eprintln!("{}", e)
+        }
     }
 
     Ok(())
 }
 
-fn analyze(name: PathBuf, source: &str) -> Result<Vec<DependencyDescriptor>> {
-    let c = compiler();
+async fn analyze(
+    c: &Compiler,
+    file_name: &str,
+    permit: OwnedSemaphorePermit,
+) -> Result<Vec<DependencyDescriptor>> {
+    let mut file = File::open(file_name)
+        .await
+        .context(format!("can not open file {}", file_name))?;
+
+    let size = file.seek(SeekFrom::End(0)).await?;
+    file.seek(SeekFrom::Start(0)).await?;
+
+    let mut buf = String::with_capacity(size.try_into()?);
+    file.read_to_string(&mut buf)
+        .await
+        .context(format!("can not read file {}", file_name))?;
+
+    drop(file);
+    drop(permit);
 
     try_with_handler(c.cm.clone(), false, |handler| {
-        let file_name = name.to_str().unwrap_or_default();
-
         let syntax = if file_name.ends_with(".ts") || file_name.ends_with(".tsx") {
             Syntax::Typescript(TsConfig {
                 tsx: file_name.ends_with(".tsx"),
@@ -121,7 +122,7 @@ fn analyze(name: PathBuf, source: &str) -> Result<Vec<DependencyDescriptor>> {
             })
         };
 
-        let fm = c.cm.new_source_file(FileName::Real(name), source.into());
+        let fm = c.cm.new_source_file(FileName::Real(file_name.into()), buf);
         let program = c
             .parse_js(
                 fm,
@@ -140,10 +141,10 @@ fn analyze(name: PathBuf, source: &str) -> Result<Vec<DependencyDescriptor>> {
     })
 }
 
-fn compiler() -> &'static Compiler {
-    static C: OnceCell<Compiler> = OnceCell::new();
-    C.get_or_init(|| {
-        let cm = Arc::new(SourceMap::new(FilePathMapping::empty()));
-        Compiler::new(cm)
-    })
-}
+// fn compiler() -> &'static Compiler {
+//     static C: OnceCell<Compiler> = OnceCell::new();
+//     C.get_or_init(|| {
+//         let cm = Arc::new(SourceMap::new(FilePathMapping::empty()));
+//         Compiler::new(cm)
+//     })
+// }
