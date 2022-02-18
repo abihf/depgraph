@@ -1,20 +1,30 @@
+// @ts-check
 import { spawn } from "child_process";
 import { once } from "events";
 import { createInterface } from "readline";
 
-const exefile = new URL('./depgraph', import.meta.url).pathname;
+const exefile = new URL("./depgraph", import.meta.url).pathname;
 
 /**
  *
- * @param {string[]} files
+ * @param {Iterable<string> | AsyncIterable<string>} files
  */
-export async function *analyze(files) {
+export async function* analyze(files) {
   const proc = spawn(exefile, {
     stdio: ["pipe", "pipe", "inherit"],
   });
-  for (const file of files) {
-    if (!proc.stdin.write(file + "\n", 'utf-8')) {
-      await once(proc.stdin, 'drain');
+  if (Symbol.asyncIterator in files) {
+    for await (const file of files) {
+      if (!proc.stdin.write(file + "\n", "utf-8")) {
+        await once(proc.stdin, "drain");
+      }
+    }
+  } else {
+    // @ts-expect-error
+    for (const file of files) {
+      if (!proc.stdin.write(file + "\n", "utf-8")) {
+        await once(proc.stdin, "drain");
+      }
     }
   }
   proc.stdin.end();
