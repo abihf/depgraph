@@ -7,4 +7,4 @@ export type Dependency = {
 }
 export type ErrorString = string;
 export type FileName = string;
-export type Item = [FileName, ErrorString | Dependency];
+export type Item = [FileName, ErrorString | Dependency[]];
