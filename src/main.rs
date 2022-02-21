@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use serde_json::{json, Value};
-use std::{collections::LinkedList, io::SeekFrom, sync::Arc, vec};
+use std::{collections::LinkedList, io::{SeekFrom, Write}, sync::Arc, vec};
 use swc::{
     common::{comments::NoopComments, source_map::SourceMap, FileName, FilePathMapping},
     config::IsModule,
@@ -12,7 +12,7 @@ use swc_ecma_parser::{EsConfig, Syntax, TsConfig};
 use tokio::{
     fs::File,
     io::{AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, BufReader},
-    sync::{OwnedSemaphorePermit, RwLock, Semaphore},
+    sync::{OwnedSemaphorePermit, Semaphore, Mutex},
 };
 
 #[tokio::main]
@@ -21,7 +21,7 @@ async fn main() -> Result<()> {
     let semaphore = Arc::new(Semaphore::new(parallel.parse()?));
 
     let mut stdin = BufReader::new(tokio::io::stdin());
-    let out_lock = Arc::new(RwLock::new(0));
+    let stdout = Arc::new(Mutex::new(std::io::stdout()));
 
     let cm = Arc::new(SourceMap::new(FilePathMapping::empty()));
     let compiler = Arc::new(Compiler::new(cm));
@@ -35,8 +35,8 @@ async fn main() -> Result<()> {
         }
 
         let c = compiler.clone();
-        let out_lock = out_lock.clone();
         let permit = semaphore.clone().acquire_owned().await?;
+        let stdout = stdout.clone();
 
         handlers.push_back(tokio::spawn(async move {
             let file_name = file_name.trim();
@@ -47,18 +47,19 @@ async fn main() -> Result<()> {
                         .map(|dep| {
                             let loc = c.cm.lookup_char_pos(dep.span.lo);
                             let name = dep.specifier.to_string();
-                            let kind: i32 = match dep.kind {
+                            let mut kind: i32 = match dep.kind {
                                 DependencyKind::Require => 0,
                                 DependencyKind::Import => 1,
                                 DependencyKind::Export => 2,
                                 DependencyKind::ImportType => 5,
                                 DependencyKind::ExportType => 6,
                             };
-                            let dynamic: i32 = if dep.is_dynamic { 1 } else { 0 };
+                            if dep.is_dynamic {
+                                kind = kind | 8;
+                            }
                             json!({
                                 "k": kind,
                                 "n": name,
-                                "d": dynamic,
                                 "l": loc.line,
                                 "c": loc.col.0
                             })
@@ -69,13 +70,11 @@ async fn main() -> Result<()> {
             };
 
             let json_line = json!([file_name, val]);
-            let guard = out_lock.write().await;
-            serde_json::to_writer(std::io::stdout(), &json_line)?;
-            println!();
-            drop(guard);
+            let mut stdout = stdout.lock().await;
+            serde_json::to_writer(stdout.by_ref(), &json_line)?;
+            stdout.write(b"\n")?;
 
-            let res: Result<()> = Ok(());
-            res
+            anyhow::Ok(())
         }));
     }
 
@@ -140,11 +139,3 @@ async fn analyze(
         Ok(analyze_dependencies(module, &NoopComments::default()))
     })
 }
-
-// fn compiler() -> &'static Compiler {
-//     static C: OnceCell<Compiler> = OnceCell::new();
-//     C.get_or_init(|| {
-//         let cm = Arc::new(SourceMap::new(FilePathMapping::empty()));
-//         Compiler::new(cm)
-//     })
-// }
