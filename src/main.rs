@@ -1,6 +1,13 @@
 use anyhow::{anyhow, Context, Result};
+use argh::FromArgs;
 use serde_json::{json, Value};
-use std::{collections::LinkedList, io::SeekFrom, sync::Arc, vec};
+use std::{
+    collections::LinkedList,
+    io::{SeekFrom, Write},
+    slice::Iter,
+    sync::Arc,
+    vec,
+};
 use swc::{
     common::{comments::NoopComments, source_map::SourceMap, FileName, FilePathMapping},
     config::IsModule,
@@ -11,54 +18,77 @@ use swc_ecma_dep_graph::{analyze_dependencies, DependencyDescriptor, DependencyK
 use swc_ecma_parser::{EsConfig, Syntax, TsConfig};
 use tokio::{
     fs::File,
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, BufReader},
-    sync::{OwnedSemaphorePermit, RwLock, Semaphore},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, BufReader, Lines, Stdin},
+    sync::{Mutex, OwnedSemaphorePermit, Semaphore},
 };
+
+/// Tesss
+#[derive(FromArgs)]
+struct Cmd {
+    /// show version
+    #[argh(switch, short = 'v')]
+    version: bool,
+
+    /// files to be analyzed
+    #[argh(positional)]
+    files: Vec<String>,
+}
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let cmd: Cmd = argh::from_env();
+    if cmd.version {
+        println!("{}", VERSION);
+        return Ok(());
+    }
+
+    let mut files = FileList {
+        use_args: cmd.files.len() > 0,
+        args: cmd.files.iter(),
+        stdin: BufReader::new(tokio::io::stdin()).lines(),
+    };
+
     let parallel = std::env::var("DEPGRAPH_PARALLEL").unwrap_or("1000".to_string());
     let semaphore = Arc::new(Semaphore::new(parallel.parse()?));
 
-    let mut stdin = BufReader::new(tokio::io::stdin());
-    let out_lock = Arc::new(RwLock::new(0));
+    let stdout = Arc::new(Mutex::new(std::io::stdout()));
 
     let cm = Arc::new(SourceMap::new(FilePathMapping::empty()));
     let compiler = Arc::new(Compiler::new(cm));
 
     let mut handlers = LinkedList::new();
-    loop {
-        let mut file_name = String::new();
-        let size = stdin.read_line(&mut file_name).await?;
-        if size == 0 {
-            break;
-        }
-
+    while let Some(file_name) = files.next().await? {
         let c = compiler.clone();
-        let out_lock = out_lock.clone();
         let permit = semaphore.clone().acquire_owned().await?;
+        let stdout = stdout.clone();
 
         handlers.push_back(tokio::spawn(async move {
             let file_name = file_name.trim();
 
             let val = match analyze(&c, file_name, permit).await {
-                Ok(deps) => Value::Array(
+                Ok((deps, has_stmt)) => Value::Array(
                     deps.iter()
                         .map(|dep| {
-                            let loc = c.cm.lookup_char_pos(dep.span.lo);
+                            let loc = c.cm.lookup_char_pos(dep.specifier_span.lo);
                             let name = dep.specifier.to_string();
-                            let kind: i32 = match dep.kind {
+                            let mut kind: i32 = match dep.kind {
                                 DependencyKind::Require => 0,
                                 DependencyKind::Import => 1,
                                 DependencyKind::Export => 2,
                                 DependencyKind::ImportType => 5,
                                 DependencyKind::ExportType => 6,
                             };
-                            let dynamic: i32 = if dep.is_dynamic { 1 } else { 0 };
+                            if dep.is_dynamic {
+                                kind = kind | 8;
+                            }
+                            if !has_stmt {
+                                kind = kind | 16
+                            }
                             json!({
                                 "k": kind,
                                 "n": name,
-                                "d": dynamic,
                                 "l": loc.line,
                                 "c": loc.col.0
                             })
@@ -69,13 +99,11 @@ async fn main() -> Result<()> {
             };
 
             let json_line = json!([file_name, val]);
-            let guard = out_lock.write().await;
-            serde_json::to_writer(std::io::stdout(), &json_line)?;
-            println!();
-            drop(guard);
+            let mut stdout = stdout.lock().await;
+            serde_json::to_writer(stdout.by_ref(), &json_line)?;
+            stdout.write(b"\n")?;
 
-            let res: Result<()> = Ok(());
-            res
+            anyhow::Ok(())
         }));
     }
 
@@ -92,7 +120,7 @@ async fn analyze(
     c: &Compiler,
     file_name: &str,
     permit: OwnedSemaphorePermit,
-) -> Result<Vec<DependencyDescriptor>> {
+) -> Result<(Vec<DependencyDescriptor>, bool)> {
     let mut file = File::open(file_name)
         .await
         .context(format!("can not open file {}", file_name))?;
@@ -137,14 +165,27 @@ async fn analyze(
             .as_module()
             .ok_or(anyhow!("program is not module"))?;
 
-        Ok(analyze_dependencies(module, &NoopComments::default()))
+        let has_stmt = module.body.iter().any(|item| item.is_stmt());
+
+        Ok((
+            analyze_dependencies(module, &NoopComments::default()),
+            has_stmt,
+        ))
     })
 }
 
-// fn compiler() -> &'static Compiler {
-//     static C: OnceCell<Compiler> = OnceCell::new();
-//     C.get_or_init(|| {
-//         let cm = Arc::new(SourceMap::new(FilePathMapping::empty()));
-//         Compiler::new(cm)
-//     })
-// }
+struct FileList<'a> {
+    use_args: bool,
+    stdin: Lines<BufReader<Stdin>>,
+    args: Iter<'a, String>,
+}
+
+impl<'a> FileList<'a> {
+    async fn next(&mut self) -> Result<Option<String>> {
+        if self.use_args {
+            Ok(self.args.next().and_then(|s| Some(s.clone())))
+        } else {
+            Ok(self.stdin.next_line().await?)
+        }
+    }
+}

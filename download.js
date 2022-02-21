@@ -1,14 +1,18 @@
 // @ts-check
 
 import { execSync } from "child_process";
-import { chmodSync, existsSync, symlinkSync } from "fs";
+import { chmodSync, existsSync, readFileSync, rmSync, symlinkSync } from "fs";
 import { exefile } from "./exe.js";
-import https from "https";
 
 async function main() {
-  if (existsSync(exefile)) return;
+  const { version } = JSON.parse(readFileSync('package.json', 'utf-8'));
 
-  if (trySymlink()) return;
+  if (existsSync(exefile)) {
+    if (checkVersion(version, exefile)) return;
+    rmSync(exefile, {force: true});
+  }
+
+  if (trySymlink(version)) return;
 
   try {
     /** @type {string} */
@@ -26,24 +30,14 @@ async function main() {
     }[`${process.platform}-${process.arch}`];
     if (!artifactName) throw new Error(`Can not find build for platform ${process.platform} arch ${process.arch}`);
 
-    console.log("Getting last successful build");
-    /** @type {{build_num: number, workflows: {job_name: string}}[]} */
-    const jobs = await fetchJson("/api/v1.1/project/gh/abihf/depgraph/tree/main?filter=successful&shallow=true");
-    const job = jobs.find((j) => j.workflows.job_name == jobName);
-    if (!job) throw new Error(`can not find last success build named "${jobName}"`);
-
-    console.log(`Getting artifact from build ${job.build_num}`);
-    /** @type {{path: string, url: string}[]} */
-    const artifacts = await fetchJson(`/api/v1.1/project/gh/abihf/depgraph/${job.build_num}/artifacts`);
-    const artifact = artifacts.find((a) => a.path === artifactName);
-    if (!artifact) throw new Error(`can not find artifact named "${artifactName}" from build ${job.build_num}`);
-
-    console.log(`Downloading ${artifact.url}`);
-    exec(`wget -O "${exefile}" "${artifact.url}"`);
+    const url = `https://github.com/abihf/depgraph/releases/download/v${version}/${artifactName}`
+    console.log(`Downloading ${url}`);
+    exec(`wget -O "${exefile}" "${url}"`);
     chmodSync(exefile, '755');
   } catch (e) {
     console.error("Download error", e);
     console.log("Trying to build from source");
+    exec(`sed -i "/^version = /c\\version = \"${version}\"" Cargo.toml`)
     exec("cargo build --release && ln -sf target/release/depgraph depgraph");
   }
 }
@@ -53,10 +47,28 @@ main().catch((e) => {
   process.exit(1);
 });
 
-function trySymlink() {
+/**
+ *
+ * @param {string} version
+ * @param {string} file
+ */
+function checkVersion(version, file) {
+  try {
+  const res = execSync(file, { stdio: ['ignore', 'pipe', 'inherit']}).toString('utf-8').trim();
+  return res === version;
+  } catch (_e) {
+    return false
+  }
+}
+
+/**
+ *
+ * @param {string} version
+ */
+function trySymlink(version) {
   for (const path of process.env.PATH?.split(":")) {
     const file = path + "/depgraph";
-    if (existsSync(file)) {
+    if (existsSync(file) && checkVersion(version, file)) {
       symlinkSync(file, exefile);
       return true;
     }
@@ -66,32 +78,8 @@ function trySymlink() {
 
 /**
  *
- * @param {string} path
+ * @param {string} cmd
  */
-function fetchJson(path) {
-  return new Promise((resolve) =>
-    https
-      .get(
-        {
-          hostname: "circleci.com",
-          path,
-          headers: {
-            "circle-token": "bf4e4a555de7be26754a28669386fe34ce378a55",
-            accept: "application/json",
-          },
-        },
-        async (res) => {
-          const chunks = [];
-          for await (const chunk of res) {
-            chunks.push(chunk);
-          }
-          resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8")));
-        }
-      )
-      .end()
-  );
-}
-
 function exec(cmd) {
   return execSync(cmd, { stdio: "inherit" });
 }

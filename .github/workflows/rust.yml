@@ -1,0 +1,77 @@
+name: Rust
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: false
+  push:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          target
+          ~/.cargo/registry
+        key: ${{ runner.os }}-rust-${{ hashFiles('Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-rust-
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: stable
+    - name: Set version
+      if: inputs.version != null
+      run: sed -i "/^version = /c\\version = \"${{ inputs.version }}\"" Cargo.toml
+    - name: Build
+      run: cargo build --release --target x86_64-unknown-linux-gnu
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2.3.1
+      with:
+        name: depgraph-x86_64-unknown-linux-gnu
+        path: target/x86_64-unknown-linux-gnu/release/depgraph
+  build-mac:
+    runs-on: macos-11
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: stable
+          target: aarch64-apple-darwin
+    - name: Cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          target
+          ~/.cargo/registry
+        key: ${{ runner.os }}-rust-${{ hashFiles('Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-rust-
+    - name: Set version
+      if: inputs.version != null
+      run: sed -i "/^version = /c\\version = \"${{ inputs.version }}\"" Cargo.toml
+    - name: Build x64
+      run: cargo build --release --target x86_64-apple-darwin
+    - name: Build arm
+      run: cargo build --release --target aarch64-apple-darwin
+    - name: Upload x64 Artifact
+      uses: actions/upload-artifact@v2.3.1
+      with:
+        name: depgraph-x86_64-apple-darwin
+        path: target/x86_64-apple-darwin/release/depgraph
+    - name: Upload arm Artifact
+      uses: actions/upload-artifact@v2.3.1
+      with:
+        name: depgraph-aarch64-apple-darwin
+        path: target/aarch64-apple-darwin/release/depgraph
