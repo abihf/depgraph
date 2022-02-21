@@ -1,6 +1,11 @@
 use anyhow::{anyhow, Context, Result};
 use serde_json::{json, Value};
-use std::{collections::LinkedList, io::{SeekFrom, Write}, sync::Arc, vec};
+use std::{
+    collections::LinkedList,
+    io::{SeekFrom, Write},
+    sync::Arc,
+    vec,
+};
 use swc::{
     common::{comments::NoopComments, source_map::SourceMap, FileName, FilePathMapping},
     config::IsModule,
@@ -12,7 +17,7 @@ use swc_ecma_parser::{EsConfig, Syntax, TsConfig};
 use tokio::{
     fs::File,
     io::{AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, BufReader},
-    sync::{OwnedSemaphorePermit, Semaphore, Mutex},
+    sync::{Mutex, OwnedSemaphorePermit, Semaphore},
 };
 
 #[tokio::main]
@@ -42,7 +47,7 @@ async fn main() -> Result<()> {
             let file_name = file_name.trim();
 
             let val = match analyze(&c, file_name, permit).await {
-                Ok(deps) => Value::Array(
+                Ok((deps, has_stmt)) => Value::Array(
                     deps.iter()
                         .map(|dep| {
                             let loc = c.cm.lookup_char_pos(dep.span.lo);
@@ -56,6 +61,9 @@ async fn main() -> Result<()> {
                             };
                             if dep.is_dynamic {
                                 kind = kind | 8;
+                            }
+                            if !has_stmt {
+                                kind = kind | 16
                             }
                             json!({
                                 "k": kind,
@@ -91,7 +99,7 @@ async fn analyze(
     c: &Compiler,
     file_name: &str,
     permit: OwnedSemaphorePermit,
-) -> Result<Vec<DependencyDescriptor>> {
+) -> Result<(Vec<DependencyDescriptor>, bool)> {
     let mut file = File::open(file_name)
         .await
         .context(format!("can not open file {}", file_name))?;
@@ -136,6 +144,11 @@ async fn analyze(
             .as_module()
             .ok_or(anyhow!("program is not module"))?;
 
-        Ok(analyze_dependencies(module, &NoopComments::default()))
+        let has_stmt = module.body.iter().any(|item| item.is_stmt());
+
+        Ok((
+            analyze_dependencies(module, &NoopComments::default()),
+            has_stmt,
+        ))
     })
 }
