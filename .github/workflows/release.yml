@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: tag version
+        required: true
+        type: string
+
+jobs:
+  build:
+    uses: './.github/workflows/rust.yml'
+
+  publish:
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/download-artifact@v2
+        with:
+          path: artifacts
+      - run: ls -R artifacts
+
+      # - uses: actions/setup-node@v2
+      #   with:
+      #     node-version: 16
+      #     registry-url: https://registry.npmjs.org/
+      # - run: touch depgraph
+      # - run: npm ci
+      # - run: rm depgraph
+      # - run: npm publish --access public --tag ${{ inputs.version }}
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{secrets.npm_token}}
