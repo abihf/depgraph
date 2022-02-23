@@ -16,7 +16,6 @@ jobs:
     needs:
       - build
     runs-on: ubuntu-latest
-    environment: release
     steps:
       - uses: actions/checkout@v2
       - uses: actions/download-artifact@v2
@@ -33,9 +32,9 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ inputs.version }}
+          tag_name: v${{ github.event.inputs.version }}
           draft: "true"
-          files: artifacts/
+          files: artifacts/*
 
       - uses: actions/setup-node@v2
         with:
@@ -44,7 +43,7 @@ jobs:
       - run: touch depgraph
       - run: npm ci
       - run: rm depgraph
-      - run: npm version ${{ inputs.version }}
+      - run: npm version ${{ github.event.inputs.version }}
       - run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{secrets.npm_token}}
