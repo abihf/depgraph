@@ -18,8 +18,7 @@ export async function* analyze(files) {
         await once(proc.stdin, "drain");
       }
     }
-    proc.stdin.end();
-  })();
+  })().finally(() => proc.stdin.end());
 
   for await (const line of createInterface(proc.stdout)) {
     /** @type {import("./type").Item} */
@@ -34,6 +33,7 @@ export async function* analyze(files) {
 /**
  * @template T
  * @param {Iterable<T> | AsyncIterable<T>} items
+ * @returns {AsyncIterable<T>}
  */
 async function* toAsyncIterable(items) {
   yield* items;

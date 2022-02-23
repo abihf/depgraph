@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
                 Ok((deps, has_stmt)) => Value::Array(
                     deps.iter()
                         .map(|dep| {
-                            let loc = c.cm.lookup_char_pos(dep.span.lo);
+                            let loc = c.cm.lookup_char_pos(dep.specifier_span.lo);
                             let name = dep.specifier.to_string();
                             let mut kind: i32 = match dep.kind {
                                 DependencyKind::Require => 0,
