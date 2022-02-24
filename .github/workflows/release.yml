@@ -23,10 +23,8 @@ jobs:
           path: artifacts
       - name: restructure asset
         run: |
-          for target in x86_64-apple-darwin aarch64-apple-darwin x86_64-unknown-linux-gnu; do
-            mv artifacts/depgraph-${target} artifacts/${target}
-            mv artifacts/${target}/depgraph artifacts/depgraph-${target}
-            rm -r artifacts/depgraph-${target}
+          for target in x86_64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin; do
+            mv artifacts/depgraph-${target}/depgraph depgraph-${target}
           done
 
       - name: Release
@@ -34,7 +32,10 @@ jobs:
         with:
           tag_name: v${{ github.event.inputs.version }}
           draft: "true"
-          files: artifacts/*
+          files: |
+            depgraph-x86_64-unknown-linux-gnu
+            depgraph-x86_64-apple-darwin
+            depgraph-aarch64-apple-darwin
 
       - uses: actions/setup-node@v2
         with:
@@ -43,7 +44,7 @@ jobs:
       - run: touch depgraph
       - run: npm ci
       - run: rm depgraph
-      - run: npm version ${{ github.event.inputs.version }}
+      - run: npm version --no-git-tag-version -f ${{ github.event.inputs.version }}
       - run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{secrets.npm_token}}
