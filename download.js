@@ -5,11 +5,11 @@ import { chmodSync, existsSync, readFileSync, rmSync, symlinkSync } from "fs";
 import { exefile } from "./exe.js";
 
 async function main() {
-  const { version } = JSON.parse(readFileSync('package.json', 'utf-8'));
+  const { version } = JSON.parse(readFileSync("package.json", "utf-8"));
 
   if (existsSync(exefile)) {
     if (checkVersion(version, exefile)) return;
-    rmSync(exefile, {force: true});
+    rmSync(exefile, { force: true });
   }
 
   if (trySymlink(version)) return;
@@ -30,22 +30,24 @@ async function main() {
     }[`${process.platform}-${process.arch}`];
     if (!artifactName) throw new Error(`Can not find build for platform ${process.platform} arch ${process.arch}`);
 
-    const url = `https://github.com/abihf/depgraph/releases/download/v${version}/${artifactName}`
+    const url = `https://github.com/abihf/depgraph/releases/download/v${version}/${artifactName}`;
     console.log(`Downloading ${url}`);
     exec(`wget -O "${exefile}" "${url}"`);
-    chmodSync(exefile, '755');
+    chmodSync(exefile, "755");
   } catch (e) {
     console.error("Download error", e);
     console.log("Trying to build from source");
-    exec(`sed -i "/^version = /c\\version = \"${version}\"" Cargo.toml`)
+    exec(`sed -i.bak '/^version = /c\\version = \"${version}\"' Cargo.toml`);
     exec("cargo build --release && ln -sf target/release/depgraph depgraph");
   }
 }
 
-main().catch((e) => {
-  console.error("Error", e);
-  process.exit(1);
-});
+if (!process.env.DEPGRAPH_SKIP_DOWNLOAD) {
+  main().catch((e) => {
+    console.error("Error", e);
+    process.exit(1);
+  });
+}
 
 /**
  *
@@ -54,10 +56,12 @@ main().catch((e) => {
  */
 function checkVersion(version, file) {
   try {
-  const res = execSync(file, { stdio: ['ignore', 'pipe', 'inherit']}).toString('utf-8').trim();
-  return res === version;
+    const res = execSync(file + " --version", { stdio: ["ignore", "pipe", "inherit"] })
+      .toString("utf-8")
+      .trim();
+    return res === version;
   } catch (_e) {
-    return false
+    return false;
   }
 }
 

@@ -42,9 +42,9 @@ jobs:
         with:
           node-version: 16
           registry-url: https://registry.npmjs.org/
-      - run: touch depgraph
       - run: npm ci
-      - run: rm depgraph
+        env: 
+          DEPGRAPH_SKIP_DOWNLOAD: '1'
       - run: npm version --no-git-tag-version -f ${{ github.event.inputs.version }}
       - run: npm publish --access public
         env:
