@@ -14,7 +14,9 @@ use swc::{
     ecmascript::ast::EsVersion,
     try_with_handler, Compiler,
 };
-use swc_ecma_dep_graph::{analyze_dependencies, DependencyDescriptor, DependencyKind};
+use swc_ecma_dep_graph::{
+    analyze_dependencies, DependencyDescriptor, DependencyKind,
+};
 use swc_ecma_parser::{EsConfig, Syntax, TsConfig};
 use tokio::{
     fs::File,
@@ -79,6 +81,8 @@ async fn main() -> Result<()> {
                                 DependencyKind::Export => 2,
                                 DependencyKind::ImportType => 5,
                                 DependencyKind::ExportType => 6,
+                                DependencyKind::ImportEquals => 1,
+                                DependencyKind::ExportEquals => 2,
                             };
                             if dep.is_dynamic {
                                 kind = kind | 8;
@@ -108,9 +112,7 @@ async fn main() -> Result<()> {
     }
 
     for handle in handlers {
-        if let Err(e) = handle.await {
-            eprintln!("{}", e)
-        }
+        handle.await??;
     }
 
     Ok(())
@@ -155,7 +157,7 @@ async fn analyze(
             .parse_js(
                 fm,
                 handler,
-                EsVersion::Es2020,
+                EsVersion::latest(),
                 syntax,
                 IsModule::Bool(true),
                 false,
