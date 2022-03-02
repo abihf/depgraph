@@ -95,7 +95,7 @@ async function downloadExe(urlStr) {
 
   while (maxRedirect > 0) {
     const res = await new Promise((resolve, reject) =>
-      (url.protocol === "https" ? https : http).get(url, resolve).on("error", reject)
+      (url.protocol === "https:" ? https : http).get(url, resolve).on("error", reject)
     );
     const status = res.statusCode;
     if (status === 200) {
