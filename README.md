@@ -1,10 +1,13 @@
 # depgraph
-[![CircleCI](https://circleci.com/gh/abihf/depgraph/tree/main.svg?style=svg)](https://circleci.com/gh/abihf/depgraph/tree/main)
+[![Rust](https://github.com/abihf/depgraph/actions/workflows/rust.yml/badge.svg?branch=main&event=push)](https://github.com/abihf/depgraph/actions/workflows/rust.yml)
+[![npm version](https://badge.fury.io/js/@abihf%2Fdepgraph.svg)](https://www.npmjs.com/package/@abihf/depgraph)
 
 ## Install
-Go to [circle ci](https://circleci.com/gh/abihf/depgraph/tree/main), and download the build artifact.
+```sh
+npm install --add @abihf/depgraph
+```
 
 ## Usage
 ```sh
-echo "file-name-1.js\nfile-name2.ts" | depgraph > output.json
+depgraph [file1] [file2]
 ```
