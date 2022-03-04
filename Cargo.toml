@@ -12,8 +12,10 @@ lto = true
 [dependencies]
 anyhow = "1.0.55"
 argh = "0.1.7"
+serde = "1.0.136"
 serde_json = { version = "1.0.79", features = ["std"] }
-swc = "0.138.0"
+swc = "0.140.1"
+swc_atoms = "0.2.9"
 swc_ecma_dep_graph = "0.63.0"
 swc_ecma_parser = "0.91.11"
 tokio = { version = "1.17.0", features = ["fs", "rt-multi-thread", "sync", "macros", "io-std", "io-util"] }

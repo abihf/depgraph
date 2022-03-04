@@ -21,13 +21,6 @@ async function main() {
 
   try {
     /** @type {string} */
-    const jobName = {
-      linux: "build-linux",
-      darwin: "build-mac",
-    }[process.platform];
-    if (!jobName) throw new Error(`Can not find build for platform ${process.platform}`);
-
-    /** @type {string} */
     const artifactName = {
       "linux-x64": "depgraph-x86_64-unknown-linux-gnu",
       "darwin-x64": "depgraph-x86_64-apple-darwin",
