@@ -1,3 +1,6 @@
 /target
-/node_modules
-/depgraph
+/npm
+node_modules
+/index.d.ts
+/index.js
+*.node
