@@ -27,10 +27,10 @@
     "version": "napi version"
   },
   "optionalDependencies": {
-    "@abihf/depgraph-win32-x64-msvc": "0.0.0",
-    "@abihf/depgraph-darwin-x64": "0.0.0",
-    "@abihf/depgraph-linux-x64-gnu": "0.0.0",
-    "@abihf/depgraph-darwin-arm64": "0.0.0",
-    "@abihf/depgraph-linux-arm64-gnu": "0.0.0"
+    "@abihf/depgraph-win32-x64-msvc": "0.2.0",
+    "@abihf/depgraph-darwin-x64": "0.2.0",
+    "@abihf/depgraph-linux-x64-gnu": "0.2.0",
+    "@abihf/depgraph-darwin-arm64": "0.2.0",
+    "@abihf/depgraph-linux-arm64-gnu": "0.2.0"
   }
 }
