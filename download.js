@@ -23,6 +23,7 @@ async function main() {
     /** @type {string} */
     const artifactName = {
       "linux-x64": "depgraph-x86_64-unknown-linux-gnu",
+      "linux-arm64": "depgraph-aarch64-unknown-linux-gnu",
       "darwin-x64": "depgraph-x86_64-apple-darwin",
       "darwin-arm64": "depgraph-aarch64-apple-darwin",
     }[`${process.platform}-${process.arch}`];
