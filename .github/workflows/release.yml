@@ -25,7 +25,7 @@ jobs:
           path: artifacts
       - name: restructure asset
         run: |
-          for target in x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin; do
+          for target in x86_64-unknown-linux aarch64-unknown-linux x86_64-apple-darwin aarch64-apple-darwin; do
             mv artifacts/depgraph-${target}/depgraph depgraph-${target}
           done
 
@@ -34,8 +34,8 @@ jobs:
         with:
           tag_name: v${{ github.event.inputs.version }}
           files: |
-            depgraph-x86_64-unknown-linux-gnu
-            depgraph-aarch64-unknown-linux-gnu
+            depgraph-x86_64-unknown-linux
+            depgraph-aarch64-unknown-linux
             depgraph-x86_64-apple-darwin
             depgraph-aarch64-apple-darwin
 

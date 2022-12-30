@@ -38,14 +38,14 @@ jobs:
       if: inputs.version != null
       run: sed -i "/^version = /c\\version = \"${{ inputs.version }}\"" Cargo.toml
     - name: Build
-      run: cross build --release --target ${{ matrix.arch }}-unknown-linux-gnu
+      run: cross build --release --target ${{ matrix.arch }}-unknown-linux-musl
       env:
         RUSTFLAGS: -C target-feature=+crt-static
     - name: Upload Artifact
       uses: actions/upload-artifact@v3
       with:
-        name: depgraph-${{ matrix.arch }}-unknown-linux-gnu
-        path: target/${{ matrix.arch }}-unknown-linux-gnu/release/depgraph
+        name: depgraph-${{ matrix.arch }}-unknown-linux
+        path: target/${{ matrix.arch }}-unknown-linux-musl/release/depgraph
 
   build-mac:
     runs-on: macos-11
