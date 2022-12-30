@@ -47,11 +47,6 @@ jobs:
         env: 
           DEPGRAPH_SKIP_DOWNLOAD: '1'
       - run: npm version --no-git-tag-version -f ${{ github.event.inputs.version }}
-      - name: delete assets
-        run: |
-          for target in x86_64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin; do
-            rm depgraph-${target}
-          done
       - run: npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ${{secrets.npm_token}}
+          NPM_TOKEN: ${{secrets.npm_token}}

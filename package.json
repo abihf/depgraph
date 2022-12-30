@@ -18,5 +18,18 @@
   "bugs": {
     "url": "https://github.com/abihf/depgraph/issues"
   },
-  "homepage": "https://github.com/abihf/depgraph#readme"
+  "homepage": "https://github.com/abihf/depgraph#readme",
+  "files": [
+    "src",
+    "Cargo.lock",
+    "Cargo.toml",
+    "LICENSE",
+    "README.md",
+    "download.js",
+    "exe.js",
+    "index.d.ts",
+    "index.js",
+    "src",
+    "type.ts"
+  ]
 }
