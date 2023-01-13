@@ -80,7 +80,7 @@ jobs:
       - name: Build in docker
         if: ${{ matrix.settings.docker }}
         run: >
-          docker run --rm -i -t --user 0:0 -w /build 
+          docker run --rm --user 0:0 -w /build 
           -v $(pwd):/build
           -v $(pwd)/.cargo-cache/git/db:/usr/local/cargo/git/db
           -v ${HOME}/.cargo/registry:/usr/local/cargo/registry
