@@ -1,35 +1,41 @@
 {
   "name": "@abihf/depgraph",
-  "version": "0.1.3",
-  "description": "ES &amp; TS Dependency Analyzer",
+  "version": "0.4.0",
   "main": "index.js",
-  "type": "module",
-  "private": false,
-  "bin": "depgraph",
-  "scripts": {
-    "postinstall": "node download.js"
+  "types": "index.d.ts",
+  "napi": {
+    "name": "depgraph",
+    "triples": {
+      "defaults": false,
+      "additional": [
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "x86_64-unknown-linux-gnu"
+      ]
+    }
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/abihf/depgraph.git"
-  },
-  "author": "Abi Hafshin <abi@hafs.in>",
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/abihf/depgraph/issues"
+  "devDependencies": {
+    "@napi-rs/cli": "^2.14.1",
+    "ava": "^5.1.0"
   },
-  "homepage": "https://github.com/abihf/depgraph#readme",
-  "files": [
-    "src",
-    "Cargo.lock",
-    "Cargo.toml",
-    "LICENSE",
-    "README.md",
-    "download.js",
-    "exe.js",
-    "index.d.ts",
-    "index.js",
-    "src",
-    "type.ts"
-  ]
+  "ava": {
+    "timeout": "3m"
+  },
+  "engines": {
+    "node": ">= 10"
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "prepublishOnly": "napi prepublish -t npm",
+    "test": "ava",
+    "universal": "napi universal",
+    "version": "napi version"
+  },
+  "volta": {
+    "node": "16.19.0"
+  }
 }
