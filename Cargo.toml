@@ -1,21 +1,29 @@
 [package]
-name = "depgraph"
-version = "0.1.0"
 edition = "2021"
+name = "abihf_depgraph"
+version = "0.4.0"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[profile.release]
-strip = true
-lto = true
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
-anyhow = "1.0.55"
+anyhow = "1.0.56"
 argh = "0.1.7"
+napi = { version = "2.10.4", default-features = false, features = ["napi6", "async"] }
+napi-derive = "2.9.3"
 serde = "1.0.136"
 serde_json = { version = "1.0.79", features = ["std"] }
-swc = "0.140.1"
-swc_atoms = "0.2.9"
-swc_ecma_dep_graph = "0.63.0"
-swc_ecma_parser = "0.91.11"
-tokio = { version = "1.17.0", features = ["fs", "rt-multi-thread", "sync", "macros", "io-std", "io-util"] }
+swc = "0.238.13"
+swc_atoms = "0.4.33"
+swc_common = "0.29.27"
+swc_ecma_dep_graph = "0.95.16"
+swc_ecma_parser = "0.123.16"
+swc_ecmascript = "0.207.7"
+tokio = { version = "1.24.1", features = ["rt-multi-thread", "fs"] }
+
+[build-dependencies]
+napi-build = "2.0.1"
+
+[profile.release]
+lto = true
+strip = true
