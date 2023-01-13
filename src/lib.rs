@@ -1,21 +1,15 @@
 #[macro_use]
 extern crate napi_derive;
 
-use napi::Result;
 use anyhow::anyhow;
+use napi::Result;
 use std::{sync::Arc, vec};
-use swc::{
-  config::IsModule,
-  try_with_handler, Compiler, HandlerOpts,
-};
-use swc_common::{
-  comments::NoopComments, source_map::SourceMap, FileName, FilePathMapping
-};
-use swc_ecmascript::ast::{
-  EsVersion, ExportSpecifier, ModuleDecl, ModuleExportName, ModuleItem
-};
+use swc::{config::IsModule, try_with_handler, Compiler, HandlerOpts};
+use swc_common::{comments::NoopComments, source_map::SourceMap, FileName, FilePathMapping};
 use swc_ecma_dep_graph::{analyze_dependencies, DependencyKind};
 use swc_ecma_parser::{EsConfig, Syntax, TsConfig};
+use swc_ecmascript::ast::{EsVersion, ExportSpecifier, ModuleDecl, ModuleExportName, ModuleItem};
+use tokio::fs;
 
 #[napi(object)]
 pub struct Dependency {
@@ -23,20 +17,25 @@ pub struct Dependency {
   pub name: String,
   pub line: u32,
   pub column: u32,
-  pub exports: Option<Vec<String>>,
-}
 
+  #[napi(ts_type = "Array<[string, string]>")]
+  pub exports: Option<Vec<Vec<String>>>,
+}
 
 fn map_err<E: std::fmt::Debug>(e: E) -> napi::Error {
   napi::Error::from_reason(format!("{:?}", e))
 }
 
 #[napi]
-pub async fn analyze(file_name: String, source: String) -> Result<Vec<Dependency>> {
+pub async fn analyze(file_name: String, source: Option<String>) -> Result<Vec<Dependency>> {
   tokio::spawn(async move {
     let file_name = file_name.as_str();
     let cm = Arc::new(SourceMap::new(FilePathMapping::empty()));
     let c = Compiler::new(cm);
+    let source = match source {
+      Some(s) => s,
+      None => fs::read_to_string(file_name.to_owned()).await?,
+    };
     let fm = c
       .cm
       .new_source_file(FileName::Real(file_name.into()), source);
@@ -81,21 +80,21 @@ pub async fn analyze(file_name: String, source: String) -> Result<Vec<Dependency
             for e in &node.specifiers {
               exports.push(match &e {
                 ExportSpecifier::Namespace(ns) => {
-                  format!("{}:*", export_name_to_string(&ns.name))
+                  vec![export_name_to_string(&ns.name), star()]
                 }
                 ExportSpecifier::Named(e) => {
                   if let Some(exported) = &e.exported {
-                    format!(
-                      "{}:{}",
+                    vec![
                       export_name_to_string(exported),
-                      export_name_to_string(&e.orig)
-                    )
+                      export_name_to_string(&e.orig),
+                    ]
                   } else {
-                    format!("{0}:{0}", export_name_to_string(&e.orig))
+                    let name = export_name_to_string(&e.orig);
+                    vec![name.to_owned(), name]
                   }
                 }
                 ExportSpecifier::Default(e) => {
-                  format!("default:{}", e.exported)
+                  vec![e.exported.to_string(), "default".to_string()]
                 }
               });
             }
@@ -104,7 +103,7 @@ pub async fn analyze(file_name: String, source: String) -> Result<Vec<Dependency
             continue;
           }
         } else if let ModuleDecl::ExportAll(node) = decl {
-          deps.push((&node.src, vec![String::from("*:*")], false));
+          deps.push((&node.src, vec![vec![star(), star()]], false));
           continue;
         }
       };
@@ -159,9 +158,13 @@ pub async fn analyze(file_name: String, source: String) -> Result<Vec<Dependency
   .map_err(map_err)?
 }
 
-fn export_name_to_string<'a>(e: &'a ModuleExportName) -> &'a str {
+fn export_name_to_string<'a>(e: &'a ModuleExportName) -> String {
   match e {
-    ModuleExportName::Ident(i) => i.sym.as_ref(),
-    ModuleExportName::Str(s) => s.value.as_ref(),
+    ModuleExportName::Ident(i) => i.sym.to_string(),
+    ModuleExportName::Str(s) => s.value.to_string(),
   }
+}
+
+fn star() -> String {
+  String::from("*")
 }

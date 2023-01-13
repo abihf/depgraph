@@ -8,6 +8,6 @@ export interface Dependency {
   name: string
   line: number
   column: number
-  exports?: Array<string>
+  exports?: Array<[string, string]>
 }
-export function analyze(fileName: string, source: string): Promise<Array<Dependency>>
+export function analyze(fileName: string, source?: string | undefined | null): Promise<Array<Dependency>>
