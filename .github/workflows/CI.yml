@@ -84,6 +84,8 @@ jobs:
           -v $(pwd):/build
           -v $(pwd)/.cargo-cache/git/db:/usr/local/cargo/git/db
           -v ${HOME}/.cargo/registry:/usr/local/cargo/registry
+          -v ${HOME}:/home/builder 
+          -e HOME=/home/builder
           ${{ matrix.settings.docker }} sh -c "${{ matrix.settings.build }}"
       - name: Build
         run: ${{ matrix.settings.build }}
